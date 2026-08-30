@@ -4,11 +4,21 @@
 
 Most BI-agent submissions will let an LLM read raw data and guess at numbers. This build does the opposite: the LLM plans the query and narrates the result, but **never touches a number**. Aggregation is deterministic code operating on normalized rows. A founder cannot use an answer they can't verify, and an unverifiable number is worse than no number — so every answer here carries inline citations back to specific monday.com item IDs, and every caveat is computed, not invented.
 
-## 2. Architecture
+## 2. Key Assumptions
+
+- **"Won" maps to Deal Status "Won" (163 deals), not Deal Stage "G. Project Won" (27 deals).** These are two independent fields in the source data and the distinction changes the answer by 6×.
+- **Work-order "completion" counts both "Completed" and "Partial Completed" execution statuses as complete.** This is a judgment call — an alternative definition counting only "Completed" would give 68% → ~60%.
+- **"Converted" deals = deal records whose name matches a name on the Work Orders board.** This is a name-based join, not a stage-based one. An alternative definition — deals in stage "H. Work Order Received" or "G. Project Won" — was considered and would give a different, lower figure (these stages overlap with but are not identical to the name-matched set).
+- **All monetary figures are INR.** The Work Orders board amount columns are explicitly labeled "Amount in Rupees" in the source data.
+- **Placeholder/template rows are excluded.** Rows where every cell's value equals that column's own header text (e.g. `text_mm6q2zdt` = "Sector/service") are treated as junk data and filtered during normalization, not counted as real records.
+- **Fiscal quarter boundaries are not assumed.** The system asks which calendar to use rather than guessing, since getting it wrong silently is worse than asking.
+- **monday.com column IDs are treated as stable** for these two specific boards and are explicitly mapped, not inferred by heuristic. Recreating the boards from scratch would require re-mapping.
+
+## 3. Architecture
 
 Three stages: **Planner** (LLM or heuristic fallback → structured query plan with board, sector, stage, status, metric) → **Aggregation Engine** (deterministic TypeScript operating on normalized `RecordRow[]`) → **Narration** (LLM or deterministic template, constrained to the computed result). Data syncs via monday.com GraphQL with **explicit column-ID mappings** — not generic keyword heuristics. This was a deliberate trade-off: the initial build used column-ID regex patterns and keyword matching to detect fields, which silently mis-detected real columns during testing (e.g. the close-date column `text_mm6qx4zr` didn't match `/date|due|close|complete/i`). Every answer cites specific monday.com item URLs, so a founder can click through and verify any number.
 
-## 3. What Manual Testing Actually Found
+## 4. What Manual Testing Actually Found
 
 The system was verified question-by-question against the raw monday.com source data, not just unit-tested. 16 unit tests pass. The following bugs were caught and fixed through manual testing against the live dataset:
 
@@ -23,7 +33,7 @@ The system was verified question-by-question against the raw monday.com source d
 
 This is the argument for the architecture: **an LLM-only system would have produced every one of these wrong answers fluently and confidently, with no way to catch them.** The deterministic core is what made these bugs findable and fixable at all.
 
-## 4. Ambiguity Handling
+## 5. Ambiguity Handling
 
 Two real examples from the live system:
 
@@ -33,7 +43,7 @@ Two real examples from the live system:
 
 Both clarifications are triggered by deterministic entity validation — the planner sets a sector or stage, and `findClosestEntity()` checks it against the actual values in the cached data before any aggregation runs.
 
-## 5. Data Resilience
+## 6. Data Resilience
 
 The quality engine found real completeness problems in the source data, surfaced as caveats on every answer:
 
@@ -49,11 +59,11 @@ The quality engine found real completeness problems in the source data, surfaced
 
 Critical design choice: missingness is reported **per-board**, not pooled. "Work-order status" is N/A for deals (the field doesn't exist on that board), so pooling would produce a misleading 69% "missing status" across 519 rows. The per-board split gives a founder the actual signal: 4 of 175 work orders lack status (2.3%), which is a different problem than "most records are missing status."
 
-## 6. Leadership Update
+## 7. Leadership Update
 
 Built as a deterministic, on-demand structured brief (KPIs + prose readout + caveats), not a chat-log export. A document going in front of leadership needs to be reliable on demand, not dependent on someone asking the right question. The executive readout computes real counts from raw data (e.g. "119 of 175 work orders are marked complete") rather than pulling from pre-computed percentage fields. The caveats section lists all 6 completeness issues found across both boards, plus the duplicate count.
 
-## 7. Honest Scope Cuts
+## 8. Honest Scope Cuts
 
 These were deliberately deprioritized in favor of verifying core correctness, which is where the actual bugs were found:
 
@@ -61,7 +71,7 @@ These were deliberately deprioritized in favor of verifying core correctness, wh
 - **PDF export** — not built. Leadership update exports as Markdown only.
 - **Duplicate disambiguation** — 305 items share names with other items on the same board (e.g. 27 deals all named "Sakura"), and these are flagged but not disambiguated. A founder clicking the source link would see multiple items with the same name.
 
-## 8. What I'd Do With More Time
+## 9. What I'd Do With More Time
 
 - **Session memory** for follow-up queries ("what about last quarter?" inheriting the previous sector filter)
 - **Persistent normalized cache** (SQLite/Redis) instead of in-memory — survives server restarts, avoids re-fetching on every cold start
