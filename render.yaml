@@ -3,8 +3,8 @@ services:
     name: skylark-bi-agent
     runtime: node
     plan: free
-    buildCommand: corepack enable && corepack prepare pnpm@10.4.1 --activate && pnpm install && pnpm build
-    startCommand: pnpm start
+    buildCommand: npx pnpm@10.4.1 install && npx pnpm@10.4.1 build
+    startCommand: node dist/index.js
     envVars:
       - key: NODE_ENV
         value: production
