@@ -3,7 +3,7 @@ services:
     name: skylark-bi-agent
     runtime: node
     plan: free
-    buildCommand: npm install -g pnpm && pnpm install && pnpm build
+    buildCommand: corepack enable && corepack prepare pnpm@10.4.1 --activate && pnpm install && pnpm build
     startCommand: pnpm start
     envVars:
       - key: NODE_ENV
