@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: skylark-bi-agent
+    runtime: node
+    plan: free
+    buildCommand: npm install -g pnpm && pnpm install && pnpm build
+    startCommand: pnpm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONDAY_API_TOKEN
+        sync: false
+      - key: BUILT_IN_FORGE_API_KEY
+        sync: false
